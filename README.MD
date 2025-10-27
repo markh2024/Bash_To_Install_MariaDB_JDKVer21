@@ -2,6 +2,7 @@
      MD Harrington Kent London UK 
      Bexleyheath 
      DA68NP
+     Contact numbers  are via Threads Instagram Facebook or X
 
 
 ## Overview
@@ -10,6 +11,65 @@
 
 - 1 : a setup_DB_procedures.sh script to be initiated first 
 - 2 : and install_JDKMK3.sh script 
+
+# Step 1: Setup database infrastructure
+```
+sudo ./setup_DB_procedures.sh
+```
+
+- Enter: database user, password
+- Creates databases and tables
+
+# Step 2: Populate servers table (manual or via application)
+- Add hosts to user_servers.servers table
+
+# Step 3: Manage Java 21 across infrastructure
+./manage_JDK21MK3.sh
+- Option 1: Install Java 21 locally
+- Option 2-3: Install on remote hosts
+- Option 9: Query database to check Java on all registered hosts
+
+
+# Upgarded to a complete  Java 21 Management Tool
+## Installation Options (1-3)
+
+### Install locally with full repository setup
+- Install on remote hosts manually
+- Batch install from hosts file
+- Parallel execution support
+- Idempotent (safe to run multiple times)
+
+### Uninstallation Options (4-6)
+
+- Uninstall locally with safe cleanup
+- Uninstall from remote hosts manually
+- Batch uninstall from hosts file
+- Preserves Java 17 if present
+- Optional confirmation prompt
+
+### Status Checks (7-9)
+
+- Check local Java 21 status
+- Check remote host Java 21 status
+- Query database for active hosts
+- Check Java status across entire infrastructure
+- Parallel checking option
+
+### Database Verification (10)
+
+- Verify database connectivity
+- Confirm table structure
+- Show record counts
+- Support EliteEL5 defaults and custom configs
+
+### SSH Key Management (11)
+
+- Create Ed25519 key pairs
+- Display existing keys with fingerprints
+- Add keys to ssh-agent
+- Copy-paste ready public key display
+
+
 
 ## Absolute basic operation 
 
@@ -393,3 +453,11 @@ echo "✅ All servers processed successfully."
     My Utube channel link below
 
 [Utube presentations](https://https://www.youtube.com/@markharrington5826)
+
+
+I am now back on  X formerly Twitter  after the usual political correctness at its best 
+
+[X formely Twitter ](https://x.com/MarkHar11467143)
+
+
+

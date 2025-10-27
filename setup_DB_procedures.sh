@@ -469,6 +469,7 @@ CREATE TABLE IF NOT EXISTS procedures (
     procedure_name VARCHAR(255) NOT NULL UNIQUE,
     explanation TEXT,
     file_location VARCHAR(255),
+    script_location CHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_procedure_name (procedure_name)
@@ -564,17 +565,20 @@ echo "📝 Logging procedure metadata..."
 
 # Escape the workdir path for SQL
 ESCAPED_WORKDIR=$(escape_sql_string "$WORKDIR")
+ESCAPED_SCRIPT_LOCATION=$(escape_sql_string "$PROCEDURE_FILE")
 
 execute_sql "$MYSQL_CREDS" DB_Procedures <<EOF
-INSERT INTO procedures (procedure_name, explanation, file_location)
+INSERT INTO procedures (procedure_name, explanation, file_location, script_location)
 VALUES (
     'setup_user_servers',
     'Creates a database (user_servers) with a servers table for remote host tracking. Includes error handling and constraints.',
-    '$ESCAPED_WORKDIR/setup_DB_procedures.sh'
+    '$ESCAPED_WORKDIR/setup_DB_procedures.sh',
+    '$ESCAPED_SCRIPT_LOCATION'
 )
 ON DUPLICATE KEY UPDATE
     explanation = VALUES(explanation),
-    file_location = VALUES(file_location);
+    file_location = VALUES(file_location),
+    script_location = VALUES(script_location);
 EOF
 
 echo "✅ Procedure metadata logged."
