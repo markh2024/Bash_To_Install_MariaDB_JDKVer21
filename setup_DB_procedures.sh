@@ -17,6 +17,13 @@
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
 # Trap errors with context
 trap 'echo "❌ Error on line $LINENO. Exit code: $?" >&2' ERR
 
@@ -670,3 +677,7 @@ echo "📂 Files saved to $WORKDIR:"
 echo "   - $(basename "$DEST_SCRIPT") (this setup script)"
 echo "   - setup_user_servers.sql (stored procedure)"
 echo
+echo -e "${YELLOW}SCRIPTS MD HARRINGTON BEXLEYHEATH KENT LONDON {NC}"
+echo -e "${YELLOW}Website https://eliteprojects.x10host.com {NC}"
+echo -e "${GREEN}Instagram https://www.instagram.com/markukh2021/{NC}"
+echo -e "${GREEN}FaceBook https://www.facebook.com/mark.harrington.14289/{NC}"

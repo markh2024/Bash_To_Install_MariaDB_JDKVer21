@@ -404,6 +404,7 @@ check_status_from_database() {
 # ⬆️ INSTALLATION FUNCTIONS
 # ----------------------------
 
+
 install_java_local() {
     if [ "$EUID" -ne 0 ]; then
         echo -e "${RED}Error: This operation requires root privileges${NC}"
@@ -438,74 +439,22 @@ install_java_local() {
     apt install -y temurin-21-jdk
     
     echo -e "${YELLOW}Step 7: Setting Java 21 as default...${NC}"
-    update-alternatives --install /usr/bin/java java /usr/lib/jvm/temurin-21-jdk-amd64/bin/java 1
-    update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/temurin-21-jdk-amd64/bin/javac 1
+    
+    # Detect architecture and set Java path accordingly
+    ARCH=$(dpkg --print-architecture)
+    JAVA_HOME="/usr/lib/jvm/temurin-21-jdk-${ARCH}"
+    
+    if [ -d "$JAVA_HOME" ]; then
+        update-alternatives --install /usr/bin/java java ${JAVA_HOME}/bin/java 1
+        update-alternatives --install /usr/bin/javac javac ${JAVA_HOME}/bin/javac 1
+        echo -e "${GREEN}✓ Java alternatives configured for ${ARCH}${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Java installed but alternatives not configured (path: $JAVA_HOME not found)${NC}"
+    fi
     
     echo -e "\n${GREEN}✓ Java 21 installed successfully!${NC}\n"
     echo -e "${BLUE}Current Java version:${NC}"
     java -version
-}
-
-install_java_remote() {
-    echo -e "${GREEN}=== Installing Java 21 on Remote Hosts ===${NC}\n"
-    
-    echo -e "${BLUE}Enter remote hosts (space-separated, e.g., user@host1 user@host2):${NC}"
-    read -r REMOTE_HOSTS
-    
-    if [ -z "$REMOTE_HOSTS" ]; then
-        echo -e "${RED}Error: No hosts specified${NC}"
-        return 1
-    fi
-    
-    echo -e "\n${BLUE}Do you want to use a specific SSH key? (leave empty for default)${NC}"
-    read -r SSH_KEY
-    
-    local SSH_OPTS=""
-    if [ -n "$SSH_KEY" ]; then
-        SSH_OPTS="-i $SSH_KEY"
-    fi
-    
-    echo -e "\n${BLUE}Install on all hosts in parallel? (y/n):${NC}"
-    read -r PARALLEL
-    
-    local INSTALL_CMD='
-set -e
-if ! dpkg -l 2>/dev/null | grep -q "temurin-21-jdk"; then
-    echo -e "\033[1;33mInstalling Java 21...\033[0m"
-    sudo apt update -y
-    sudo apt install -y wget apt-transport-https gpg
-    wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/adoptium.gpg > /dev/null
-    CODENAME=$(awk -F= "/^VERSION_CODENAME/{print\$2}" /etc/os-release)
-    echo "deb https://packages.adoptium.net/artifactory/deb ${CODENAME} main" | sudo tee /etc/apt/sources.list.d/adoptium.list
-    sudo apt update -y
-    sudo apt install -y temurin-21-jdk
-    sudo update-alternatives --install /usr/bin/java java /usr/lib/jvm/temurin-21-jdk-amd64/bin/java 1
-    sudo update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/temurin-21-jdk-amd64/bin/javac 1
-    echo -e "\033[0;32m✓ Java 21 installed\033[0m"
-else
-    echo -e "\033[1;33m✓ Java 21 already installed\033[0m"
-fi
-java -version 2>&1
-'
-    
-    for HOST in $REMOTE_HOSTS; do
-        if [ "$PARALLEL" = "y" ] || [ "$PARALLEL" = "Y" ]; then
-            {
-                echo -e "\n${YELLOW}[${HOST}] Starting installation...${NC}"
-                ssh $SSH_OPTS -o StrictHostKeyChecking=no -t "$HOST" "$INSTALL_CMD" && \
-                echo -e "${GREEN}[${HOST}] Installation completed!${NC}" || \
-                echo -e "${RED}[${HOST}] Installation failed!${NC}"
-            } &
-        else
-            echo -e "\n${YELLOW}=== Installing on ${HOST} ===${NC}"
-            ssh $SSH_OPTS -o StrictHostKeyChecking=no -t "$HOST" "$INSTALL_CMD"
-        fi
-    done
-    
-    if [ "$PARALLEL" = "y" ] || [ "$PARALLEL" = "Y" ]; then
-        wait
-        echo -e "\n${GREEN}All installations completed!${NC}"
-    fi
 }
 
 install_from_file() {
@@ -522,7 +471,7 @@ install_from_file() {
     echo -e "\n${BLUE}Do you want to use a specific SSH key? (leave empty for default)${NC}"
     read -r SSH_KEY
     
-    local SSH_OPTS=""
+    SSH_OPTS=""
     if [ -n "$SSH_KEY" ]; then
         SSH_OPTS="-i $SSH_KEY"
     fi
@@ -541,9 +490,18 @@ if ! dpkg -l 2>/dev/null | grep -q "temurin-21-jdk"; then
     echo "deb https://packages.adoptium.net/artifactory/deb ${CODENAME} main" | sudo tee /etc/apt/sources.list.d/adoptium.list
     sudo apt update -y
     sudo apt install -y temurin-21-jdk
-    sudo update-alternatives --install /usr/bin/java java /usr/lib/jvm/temurin-21-jdk-amd64/bin/java 1
-    sudo update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/temurin-21-jdk-amd64/bin/javac 1
-    echo -e "\033[0;32m✓ Java 21 installed\033[0m"
+    
+    # Detect architecture and set Java path accordingly
+    ARCH=$(dpkg --print-architecture)
+    JAVA_HOME="/usr/lib/jvm/temurin-21-jdk-${ARCH}"
+    
+    if [ -d "$JAVA_HOME" ]; then
+        sudo update-alternatives --install /usr/bin/java java ${JAVA_HOME}/bin/java 1
+        sudo update-alternatives --install /usr/bin/javac javac ${JAVA_HOME}/bin/javac 1
+        echo -e "\033[0;32m✓ Java 21 installed on ${ARCH}\033[0m"
+    else
+        echo -e "\033[1;33m⚠️  Java installed but alternatives not configured (path: $JAVA_HOME not found)\033[0m"
+    fi
 else
     echo -e "\033[1;33m✓ Java 21 already installed\033[0m"
 fi
@@ -626,27 +584,266 @@ uninstall_java_local() {
     
     echo -e "${GREEN}✓ Java 21 successfully uninstalled locally${NC}"
 }
+# ----------------------------
+# 💾 DATABASE-DRIVEN INSTALL/UNINSTALL
+# ----------------------------
+# ----------------------------
+# 💾 DATABASE-DRIVEN INSTALL/UNINSTALL
+# ----------------------------
 
-uninstall_java_remote() {
-    echo -e "${GREEN}=== Uninstalling Java 21 from Remote Hosts ===${NC}\n"
+install_from_database() {
+    echo -e "${GREEN}=== Installing Java 21 from Database ===${NC}\n"
     
-    echo -e "${BLUE}Enter remote hosts (space-separated, e.g., user@host1 user@host2):${NC}"
-    read -r REMOTE_HOSTS
+    echo -e "${BLUE}Enter MariaDB host (default: $DEFAULT_DB_HOST):${NC}"
+    read -r DB_HOST
+    DB_HOST=${DB_HOST:-$DEFAULT_DB_HOST}
     
-    if [ -z "$REMOTE_HOSTS" ]; then
-        echo -e "${RED}Error: No hosts specified${NC}"
+    echo -e "${BLUE}Enter MariaDB port (default: $DEFAULT_DB_PORT):${NC}"
+    read -r DB_PORT
+    DB_PORT=${DB_PORT:-$DEFAULT_DB_PORT}
+    
+    echo -e "${BLUE}Enter database username:${NC}"
+    read -r DB_USER
+    
+    echo -e "${BLUE}Enter database password:${NC}"
+    read -s DB_PASS
+    echo ""
+    
+    if ! command -v mysql &> /dev/null && ! command -v mariadb &> /dev/null; then
+        echo -e "${YELLOW}Installing MariaDB client...${NC}"
+        apt update && apt install -y mariadb-client || apt install -y default-mysql-client
+    fi
+    
+    if ! verify_db_connection "$DB_HOST" "$DB_PORT" "$DB_USER" "$DB_PASS"; then
         return 1
     fi
     
-    echo -e "\n${BLUE}Do you want to use a specific SSH key? (leave empty for default)${NC}"
+    echo -e "\n${BLUE}Enter database name (default: $DEFAULT_SERVERS_DB):${NC}"
+    read -r DB_NAME
+    DB_NAME=${DB_NAME:-$DEFAULT_SERVERS_DB}
+    
+    echo -e "${BLUE}Enter table name (default: $DEFAULT_TABLE):${NC}"
+    read -r TABLE_NAME
+    TABLE_NAME=${TABLE_NAME:-$DEFAULT_TABLE}
+    
+    local cmd="mysql"
+    if command -v mariadb &>/dev/null; then
+        cmd="mariadb"
+    fi
+    
+    # Filter options
+    echo -e "\n${BLUE}Filter by environment? (leave empty for all):${NC}"
+    read -r FILTER_ENV
+    
+    echo -e "${BLUE}Active servers only? (Y/n):${NC}"
+    read -r ACTIVE_ONLY
+    ACTIVE_ONLY=${ACTIVE_ONLY:-Y}
+    
+    # Build query
+    local WHERE_CLAUSE="WHERE 1=1"
+    if [[ "$ACTIVE_ONLY" =~ ^[Yy]$ ]]; then
+        WHERE_CLAUSE="$WHERE_CLAUSE AND active=1"
+    fi
+    if [ -n "$FILTER_ENV" ]; then
+        WHERE_CLAUSE="$WHERE_CLAUSE AND environment='$FILTER_ENV'"
+    fi
+    
+    # Fetch server data
+    local server_data
+    server_data=$($cmd -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -N -e \
+        "SELECT ssh_user, hostname, ip_address, environment FROM $TABLE_NAME $WHERE_CLAUSE;" 2>/dev/null || echo "")
+    
+    if [ -z "$server_data" ]; then
+        echo -e "${RED}No servers found matching criteria${NC}"
+        return 1
+    fi
+    
+    # Display servers
+    echo -e "\n${GREEN}Found servers:${NC}"
+    echo -e "${BLUE}-----------------------------------------------------------${NC}"
+    printf "%-20s %-25s %-15s %-10s\n" "SSH_USER" "HOSTNAME" "IP_ADDRESS" "ENVIRONMENT"
+    echo -e "${BLUE}-----------------------------------------------------------${NC}"
+    
+    local server_count=0
+    while IFS=$'\t' read -r ssh_user hostname ip_address environment; do
+        printf "%-20s %-25s %-15s %-10s\n" "$ssh_user" "$hostname" "$ip_address" "$environment"
+        ((server_count++))
+    done <<< "$server_data"
+    
+    echo -e "${BLUE}-----------------------------------------------------------${NC}"
+    echo -e "${GREEN}Total: $server_count servers${NC}\n"
+    
+    echo -e "${BLUE}Proceed with installation? (y/N):${NC}"
+    read -r PROCEED
+    if [[ ! "$PROCEED" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Installation cancelled${NC}"
+        return 0
+    fi
+    
+    echo -e "\n${BLUE}Use specific SSH key? (leave empty for default):${NC}"
     read -r SSH_KEY
     
-    local SSH_OPTS=""
+    SSH_OPTS=""
     if [ -n "$SSH_KEY" ]; then
         SSH_OPTS="-i $SSH_KEY"
     fi
     
-    echo -e "\n${BLUE}Uninstall on all hosts in parallel? (y/n):${NC}"
+    echo -e "${BLUE}Install in parallel? (y/n):${NC}"
+    read -r PARALLEL
+    
+    local INSTALL_CMD='
+set -e
+if ! dpkg -l 2>/dev/null | grep -q "temurin-21-jdk"; then
+    echo -e "\033[1;33mInstalling Java 21...\033[0m"
+    sudo apt update -y
+    sudo apt install -y wget apt-transport-https gpg
+    wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/adoptium.gpg > /dev/null
+    CODENAME=$(awk -F= "/^VERSION_CODENAME/{print\$2}" /etc/os-release)
+    echo "deb https://packages.adoptium.net/artifactory/deb ${CODENAME} main" | sudo tee /etc/apt/sources.list.d/adoptium.list
+    sudo apt update -y
+    sudo apt install -y temurin-21-jdk
+    
+    # Detect architecture and set Java path accordingly
+    ARCH=$(dpkg --print-architecture)
+    JAVA_HOME="/usr/lib/jvm/temurin-21-jdk-${ARCH}"
+    
+    if [ -d "$JAVA_HOME" ]; then
+        sudo update-alternatives --install /usr/bin/java java ${JAVA_HOME}/bin/java 1
+        sudo update-alternatives --install /usr/bin/javac javac ${JAVA_HOME}/bin/javac 1
+        echo -e "\033[0;32m✓ Java 21 installed on ${ARCH}\033[0m"
+    else
+        echo -e "\033[1;33m⚠️  Java installed but alternatives not configured\033[0m"
+    fi
+else
+    echo -e "\033[1;33m✓ Java 21 already installed\033[0m"
+fi
+java -version 2>&1
+'
+    
+    echo -e "\n${GREEN}Starting installation...${NC}\n"
+    
+    while IFS=$'\t' read -r ssh_user hostname ip_address environment; do
+        HOST="${ssh_user}@${ip_address}"
+        DISPLAY_NAME="[${hostname}/${environment}]"
+        
+        if [ "$PARALLEL" = "y" ] || [ "$PARALLEL" = "Y" ]; then
+            {
+                echo -e "${YELLOW}${DISPLAY_NAME} Starting installation...${NC}"
+                ssh $SSH_OPTS -o StrictHostKeyChecking=no -t "$HOST" "$INSTALL_CMD" && \
+                echo -e "${GREEN}${DISPLAY_NAME} Installation completed!${NC}" || \
+                echo -e "${RED}${DISPLAY_NAME} Installation failed!${NC}"
+            } &
+        else
+            echo -e "\n${YELLOW}=== Installing on ${DISPLAY_NAME} ${HOST} ===${NC}"
+            ssh $SSH_OPTS -o StrictHostKeyChecking=no -t "$HOST" "$INSTALL_CMD"
+        fi
+    done <<< "$server_data"
+    
+    if [ "$PARALLEL" = "y" ] || [ "$PARALLEL" = "Y" ]; then
+        wait
+        echo -e "\n${GREEN}All installations completed!${NC}"
+    fi
+}
+
+uninstall_from_database() {
+    echo -e "${GREEN}=== Uninstalling Java 21 from Database ===${NC}\n"
+    
+    echo -e "${BLUE}Enter MariaDB host (default: $DEFAULT_DB_HOST):${NC}"
+    read -r DB_HOST
+    DB_HOST=${DB_HOST:-$DEFAULT_DB_HOST}
+    
+    echo -e "${BLUE}Enter MariaDB port (default: $DEFAULT_DB_PORT):${NC}"
+    read -r DB_PORT
+    DB_PORT=${DB_PORT:-$DEFAULT_DB_PORT}
+    
+    echo -e "${BLUE}Enter database username:${NC}"
+    read -r DB_USER
+    
+    echo -e "${BLUE}Enter database password:${NC}"
+    read -s DB_PASS
+    echo ""
+    
+    if ! command -v mysql &> /dev/null && ! command -v mariadb &> /dev/null; then
+        echo -e "${YELLOW}Installing MariaDB client...${NC}"
+        apt update && apt install -y mariadb-client || apt install -y default-mysql-client
+    fi
+    
+    if ! verify_db_connection "$DB_HOST" "$DB_PORT" "$DB_USER" "$DB_PASS"; then
+        return 1
+    fi
+    
+    echo -e "\n${BLUE}Enter database name (default: $DEFAULT_SERVERS_DB):${NC}"
+    read -r DB_NAME
+    DB_NAME=${DB_NAME:-$DEFAULT_SERVERS_DB}
+    
+    echo -e "${BLUE}Enter table name (default: $DEFAULT_TABLE):${NC}"
+    read -r TABLE_NAME
+    TABLE_NAME=${TABLE_NAME:-$DEFAULT_TABLE}
+    
+    local cmd="mysql"
+    if command -v mariadb &>/dev/null; then
+        cmd="mariadb"
+    fi
+    
+    # Filter options
+    echo -e "\n${BLUE}Filter by environment? (leave empty for all):${NC}"
+    read -r FILTER_ENV
+    
+    echo -e "${BLUE}Active servers only? (Y/n):${NC}"
+    read -r ACTIVE_ONLY
+    ACTIVE_ONLY=${ACTIVE_ONLY:-Y}
+    
+    # Build query
+    local WHERE_CLAUSE="WHERE 1=1"
+    if [[ "$ACTIVE_ONLY" =~ ^[Yy]$ ]]; then
+        WHERE_CLAUSE="$WHERE_CLAUSE AND active=1"
+    fi
+    if [ -n "$FILTER_ENV" ]; then
+        WHERE_CLAUSE="$WHERE_CLAUSE AND environment='$FILTER_ENV'"
+    fi
+    
+    # Fetch server data
+    local server_data
+    server_data=$($cmd -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -N -e \
+        "SELECT ssh_user, hostname, ip_address, environment FROM $TABLE_NAME $WHERE_CLAUSE;" 2>/dev/null || echo "")
+    
+    if [ -z "$server_data" ]; then
+        echo -e "${RED}No servers found matching criteria${NC}"
+        return 1
+    fi
+    
+    # Display servers
+    echo -e "\n${GREEN}Found servers:${NC}"
+    echo -e "${BLUE}-----------------------------------------------------------${NC}"
+    printf "%-20s %-25s %-15s %-10s\n" "SSH_USER" "HOSTNAME" "IP_ADDRESS" "ENVIRONMENT"
+    echo -e "${BLUE}-----------------------------------------------------------${NC}"
+    
+    local server_count=0
+    while IFS=$'\t' read -r ssh_user hostname ip_address environment; do
+        printf "%-20s %-25s %-15s %-10s\n" "$ssh_user" "$hostname" "$ip_address" "$environment"
+        ((server_count++))
+    done <<< "$server_data"
+    
+    echo -e "${BLUE}-----------------------------------------------------------${NC}"
+    echo -e "${GREEN}Total: $server_count servers${NC}\n"
+    
+    echo -e "${RED}⚠️  WARNING: This will uninstall Java 21 from $server_count servers${NC}"
+    echo -e "${BLUE}Proceed with uninstallation? (y/N):${NC}"
+    read -r PROCEED
+    if [[ ! "$PROCEED" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Uninstallation cancelled${NC}"
+        return 0
+    fi
+    
+    echo -e "\n${BLUE}Use specific SSH key? (leave empty for default):${NC}"
+    read -r SSH_KEY
+    
+    SSH_OPTS=""
+    if [ -n "$SSH_KEY" ]; then
+        SSH_OPTS="-i $SSH_KEY"
+    fi
+    
+    echo -e "${BLUE}Uninstall in parallel? (y/n):${NC}"
     read -r PARALLEL
     
     local UNINSTALL_CMD='
@@ -660,7 +857,7 @@ if dpkg -l 2>/dev/null | grep -q "temurin-21-jdk"; then
         [ -f "/usr/local/bin/switch-java" ] && sudo rm -f /usr/local/bin/switch-java
         sudo update-alternatives --remove-all java 2>/dev/null || true
         sudo update-alternatives --remove-all javac 2>/dev/null || true
-        echo -e "\033[0;32m✓ Java 21 uninstalled (no other Java versions present)\033[0m"
+        echo -e "\033[0;32m✓ Java 21 uninstalled\033[0m"
     else
         echo -e "\033[0;32m✓ Java 21 uninstalled (Java 17 remains)\033[0m"
     fi
@@ -669,25 +866,104 @@ else
 fi
 '
     
-    for HOST in $REMOTE_HOSTS; do
+    echo -e "\n${GREEN}Starting uninstallation...${NC}\n"
+    
+    while IFS=$'\t' read -r ssh_user hostname ip_address environment; do
+        HOST="${ssh_user}@${ip_address}"
+        DISPLAY_NAME="[${hostname}/${environment}]"
+        
         if [ "$PARALLEL" = "y" ] || [ "$PARALLEL" = "Y" ]; then
             {
-                echo -e "\n${YELLOW}[${HOST}] Starting uninstallation...${NC}"
+                echo -e "${YELLOW}${DISPLAY_NAME} Starting uninstallation...${NC}"
                 ssh $SSH_OPTS -o StrictHostKeyChecking=no -t "$HOST" "$UNINSTALL_CMD" && \
-                echo -e "${GREEN}[${HOST}] Uninstallation completed successfully!${NC}" || \
-                echo -e "${RED}[${HOST}] Uninstallation failed!${NC}"
+                echo -e "${GREEN}${DISPLAY_NAME} Uninstallation completed!${NC}" || \
+                echo -e "${RED}${DISPLAY_NAME} Uninstallation failed!${NC}"
             } &
         else
-            echo -e "\n${YELLOW}=== Uninstalling on ${HOST} ===${NC}"
+            echo -e "\n${YELLOW}=== Uninstalling on ${DISPLAY_NAME} ${HOST} ===${NC}"
             ssh $SSH_OPTS -o StrictHostKeyChecking=no -t "$HOST" "$UNINSTALL_CMD"
         fi
-    done
+    done <<< "$server_data"
     
     if [ "$PARALLEL" = "y" ] || [ "$PARALLEL" = "Y" ]; then
         wait
         echo -e "\n${GREEN}All uninstallations completed!${NC}"
     fi
 }
+
+
+
+install_java_remote() {
+    echo -e "${GREEN}=== Installing Java 21 on Remote Hosts ===${NC}\n"
+    
+    echo -e "${BLUE}Enter remote hosts (space-separated, e.g., user@host1 user@host2):${NC}"
+    read -r REMOTE_HOSTS
+    
+    if [ -z "$REMOTE_HOSTS" ]; then
+        echo -e "${RED}Error: No hosts specified${NC}"
+        return 1
+    fi
+    
+    echo -e "\n${BLUE}Do you want to use a specific SSH key? (leave empty for default)${NC}"
+    read -r SSH_KEY
+    
+    SSH_OPTS=""
+    if [ -n "$SSH_KEY" ]; then
+        SSH_OPTS="-i $SSH_KEY"
+    fi
+    
+    echo -e "\n${BLUE}Install on all hosts in parallel? (y/n):${NC}"
+    read -r PARALLEL
+    
+    local INSTALL_CMD='
+set -e
+if ! dpkg -l 2>/dev/null | grep -q "temurin-21-jdk"; then
+    echo -e "\033[1;33mInstalling Java 21...\033[0m"
+    sudo apt update -y
+    sudo apt install -y wget apt-transport-https gpg
+    wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/adoptium.gpg > /dev/null
+    CODENAME=$(awk -F= "/^VERSION_CODENAME/{print\$2}" /etc/os-release)
+    echo "deb https://packages.adoptium.net/artifactory/deb ${CODENAME} main" | sudo tee /etc/apt/sources.list.d/adoptium.list
+    sudo apt update -y
+    sudo apt install -y temurin-21-jdk
+    
+    # Detect architecture and set Java path accordingly
+    ARCH=$(dpkg --print-architecture)
+    JAVA_HOME="/usr/lib/jvm/temurin-21-jdk-${ARCH}"
+    
+    if [ -d "$JAVA_HOME" ]; then
+        sudo update-alternatives --install /usr/bin/java java ${JAVA_HOME}/bin/java 1
+        sudo update-alternatives --install /usr/bin/javac javac ${JAVA_HOME}/bin/javac 1
+        echo -e "\033[0;32m✓ Java 21 installed on ${ARCH}\033[0m"
+    else
+        echo -e "\033[1;33m⚠️  Java installed but alternatives not configured (path: $JAVA_HOME not found)\033[0m"
+    fi
+else
+    echo -e "\033[1;33m✓ Java 21 already installed\033[0m"
+fi
+java -version 2>&1
+'
+    
+    for HOST in $REMOTE_HOSTS; do
+        if [ "$PARALLEL" = "y" ] || [ "$PARALLEL" = "Y" ]; then
+            {
+                echo -e "\n${YELLOW}[${HOST}] Starting installation...${NC}"
+                ssh $SSH_OPTS -o StrictHostKeyChecking=no -t "$HOST" "$INSTALL_CMD" && \
+                echo -e "${GREEN}[${HOST}] Installation completed!${NC}" || \
+                echo -e "${RED}[${HOST}] Installation failed!${NC}"
+            } &
+        else
+            echo -e "\n${YELLOW}=== Installing on ${HOST} ===${NC}"
+            ssh $SSH_OPTS -o StrictHostKeyChecking=no -t "$HOST" "$INSTALL_CMD"
+        fi
+    done
+    
+    if [ "$PARALLEL" = "y" ] || [ "$PARALLEL" = "Y" ]; then
+        wait
+        echo -e "\n${GREEN}All installations completed!${NC}"
+    fi
+}
+
 
 uninstall_from_file() {
     echo -e "${GREEN}=== Uninstalling Java 21 from Hosts File ===${NC}\n"
@@ -754,10 +1030,171 @@ fi
 }
 
 # ----------------------------
-# 🎯 Main Menu
+# 🔄 Sync /etc/hosts from Database
+# ----------------------------
+
+sync_hosts_from_database() {
+    echo -e "${GREEN}=== Syncing /etc/hosts from Database ===${NC}\n"
+    
+    # Check if running as root
+    if [ "$EUID" -ne 0 ]; then
+        echo -e "${YELLOW}Note: Root access required to update /etc/hosts${NC}"
+        echo -e "${BLUE}Run with sudo to enable hosts file sync${NC}\n"
+        return 1
+    fi
+    
+    echo -e "${BLUE}Enter MariaDB host (default: $DEFAULT_DB_HOST):${NC}"
+    read -r DB_HOST
+    DB_HOST=${DB_HOST:-$DEFAULT_DB_HOST}
+    
+    echo -e "${BLUE}Enter MariaDB port (default: $DEFAULT_DB_PORT):${NC}"
+    read -r DB_PORT
+    DB_PORT=${DB_PORT:-$DEFAULT_DB_PORT}
+    
+    echo -e "${BLUE}Enter database username:${NC}"
+    read -r DB_USER
+    
+    echo -e "${BLUE}Enter database password:${NC}"
+    read -s DB_PASS
+    echo ""
+    
+    if ! command -v mysql &> /dev/null && ! command -v mariadb &> /dev/null; then
+        echo -e "${YELLOW}Installing MariaDB client...${NC}"
+        apt update && apt install -y mariadb-client || apt install -y default-mysql-client
+    fi
+    
+    if ! verify_db_connection "$DB_HOST" "$DB_PORT" "$DB_USER" "$DB_PASS"; then
+        echo -e "${RED}Failed to connect to database${NC}"
+        return 1
+    fi
+    
+    echo -e "\n${BLUE}Enter database name (default: $DEFAULT_SERVERS_DB):${NC}"
+    read -r DB_NAME
+    DB_NAME=${DB_NAME:-$DEFAULT_SERVERS_DB}
+    
+    echo -e "${BLUE}Enter table name (default: $DEFAULT_TABLE):${NC}"
+    read -r TABLE_NAME
+    TABLE_NAME=${TABLE_NAME:-$DEFAULT_TABLE}
+    
+    local cmd="mysql"
+    if command -v mariadb &>/dev/null; then
+        cmd="mariadb"
+    fi
+    
+    # Filter options
+    echo -e "\n${BLUE}Sync active servers only? (Y/n):${NC}"
+    read -r ACTIVE_ONLY
+    ACTIVE_ONLY=${ACTIVE_ONLY:-Y}
+    
+    # Build query
+    local WHERE_CLAUSE="WHERE 1=1"
+    if [[ "$ACTIVE_ONLY" =~ ^[Yy]$ ]]; then
+        WHERE_CLAUSE="$WHERE_CLAUSE AND active=1"
+    fi
+    
+    # Fetch server data
+    echo -e "${YELLOW}Fetching server data from database...${NC}"
+    local server_data
+    server_data=$($cmd -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -N -e \
+        "SELECT ip_address, hostname FROM $TABLE_NAME $WHERE_CLAUSE;" 2>/dev/null || echo "")
+    
+    if [ -z "$server_data" ]; then
+        echo -e "${RED}No servers found in database${NC}"
+        return 1
+    fi
+    
+    # Count entries
+    local entry_count=0
+    entry_count=$(echo "$server_data" | wc -l)
+    
+    echo -e "${GREEN}Found $entry_count server(s) to sync${NC}\n"
+    
+    # Create backup of /etc/hosts
+    local backup_file="/etc/hosts.backup.$(date +%Y%m%d_%H%M%S)"
+    cp /etc/hosts "$backup_file"
+    echo -e "${BLUE}Backup created: $backup_file${NC}"
+    
+    # Define markers for managed section
+    local START_MARKER="# --- START: Managed by manage_JDK21MK3.sh ---"
+    local END_MARKER="# --- END: Managed by manage_JDK21MK3.sh ---"
+    
+    # Remove old managed section if it exists
+    if grep -q "$START_MARKER" /etc/hosts; then
+        echo -e "${YELLOW}Removing old managed entries...${NC}"
+        sed -i "/$START_MARKER/,/$END_MARKER/d" /etc/hosts
+    fi
+    
+    # Prepare new entries
+    local new_entries=""
+    new_entries+="$START_MARKER\n"
+    
+    while IFS=$'\t' read -r ip_address hostname; do
+        if [ -n "$ip_address" ] && [ -n "$hostname" ]; then
+            new_entries+="$ip_address\t$hostname\n"
+        fi
+    done <<< "$server_data"
+    
+    new_entries+="$END_MARKER"
+    
+    # Append new managed section to /etc/hosts
+    echo -e "\n$new_entries" >> /etc/hosts
+    
+    echo -e "\n${GREEN}✓ Successfully synced $entry_count entries to /etc/hosts${NC}"
+    echo -e "${BLUE}Managed section is marked with:${NC}"
+    echo -e "  ${YELLOW}$START_MARKER${NC}"
+    echo -e "  ${YELLOW}$END_MARKER${NC}\n"
+    
+    # Display what was added
+    echo -e "${BLUE}Added entries:${NC}"
+    echo -e "${BLUE}-----------------------------------------------------------${NC}"
+    printf "%-20s %-30s\n" "IP_ADDRESS" "HOSTNAME"
+    echo -e "${BLUE}-----------------------------------------------------------${NC}"
+    
+    while IFS=$'\t' read -r ip_address hostname; do
+        if [ -n "$ip_address" ] && [ -n "$hostname" ]; then
+            printf "%-20s %-30s\n" "$ip_address" "$hostname"
+        fi
+    done <<< "$server_data"
+    
+    echo -e "${BLUE}-----------------------------------------------------------${NC}\n"
+}
+# ----------------------------
+# 🎯 Startup Function - Auto Sync on Launch
+# ----------------------------
+
+startup_hosts_sync() {
+    echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║           Java 21 Management Tool - Startup                   ║${NC}"
+    echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}\n"
+    
+    if [ "$EUID" -eq 0 ]; then
+        echo -e "${BLUE}Sync /etc/hosts with database on startup? (y/N):${NC} "
+        read -r SYNC_HOSTS
+        
+        if [[ "$SYNC_HOSTS" =~ ^[Yy]$ ]]; then
+            sync_hosts_from_database
+            
+            echo -e "${BLUE}Press Enter to continue to main menu...${NC}"
+            read -r
+        fi
+    else
+        echo -e "${YELLOW}Note: Run with sudo to enable /etc/hosts sync feature${NC}\n"
+        sleep 2
+    fi
+}
+
+
+
+# ----------------------------
+# 🎯 Updated Menu Display
 # ----------------------------
 
 show_menu() {
+	echo -e "${YELLOW}SCRIPTS MD HARRINGTON BEXLEYHEATH KENT LONDON {NC}"
+	echo -e "${YELLOW}Website https://eliteprojects.x10host.com {NC}"
+	echo -e "${GREEN}Instagram https://www.instagram.com/markukh2021/{NC}"
+	echo -e "${GREEN}FaceBook https://www.facebook.com/mark.harrington.14289/{NC}"
+	
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║        Java 21 Management Tool (Install/Uninstall)           ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}\n"
@@ -766,29 +1203,40 @@ show_menu() {
     echo -e "${YELLOW}1)${NC}  Install Java 21 locally"
     echo -e "${YELLOW}2)${NC}  Install Java 21 on remote hosts (manual entry)"
     echo -e "${YELLOW}3)${NC}  Install Java 21 on remote hosts (from file)"
+    echo -e "${YELLOW}4)${NC}  Install Java 21 from database (user_servers.servers)"
     
     echo -e "\n${RED}UNINSTALL JAVA 21:${NC}"
-    echo -e "${YELLOW}4)${NC}  Check/Uninstall Java 21 locally"
-    echo -e "${YELLOW}5)${NC}  Uninstall Java 21 from remote hosts (manual entry)"
-    echo -e "${YELLOW}6)${NC}  Uninstall Java 21 from remote hosts (from file)"
+    echo -e "${YELLOW}5)${NC}  Check/Uninstall Java 21 locally"
+    echo -e "${YELLOW}6)${NC}  Uninstall Java 21 from remote hosts (manual entry)"
+    echo -e "${YELLOW}7)${NC}  Uninstall Java 21 from remote hosts (from file)"
+    echo -e "${YELLOW}8)${NC}  Uninstall Java 21 from database (user_servers.servers)"
     
     echo -e "\n${BLUE}STATUS CHECK:${NC}"
-    echo -e "${YELLOW}7)${NC}  Check Java 21 status locally"
-    echo -e "${YELLOW}8)${NC}  Check Java 21 status on remote host"
-    echo -e "${YELLOW}9)${NC}  Check Java status on database hosts"
+    echo -e "${YELLOW}9)${NC}  Check Java 21 status locally"
+    echo -e "${YELLOW}10)${NC} Check Java 21 status on remote host"
+    echo -e "${YELLOW}11)${NC} Check Java status on database hosts"
     
     echo -e "\n${BLUE}DATABASE VERIFICATION:${NC}"
-    echo -e "${YELLOW}10)${NC} Verify database configuration"
+    echo -e "${YELLOW}12)${NC} Verify database configuration"
     
     echo -e "\n${BLUE}SSH KEY MANAGEMENT:${NC}"
-    echo -e "${YELLOW}11)${NC} Create/Manage SSH keys"
+    echo -e "${YELLOW}13)${NC} Create/Manage SSH keys"
     
-    echo -e "\n${YELLOW}12)${NC} Exit\n"
-    echo -e "${BLUE}Select an option (1-12):${NC} "
+    echo -e "\n${BLUE}HOSTS FILE MANAGEMENT:${NC}"
+    echo -e "${YELLOW}14)${NC} Sync /etc/hosts from database"
+    
+    echo -e "\n${YELLOW}15)${NC} Exit\n"
+    echo -e "${BLUE}Select an option (1-15):${NC} "
 }
 
-# Main execution
+# ----------------------------
+# 🎯 Updated Main Function with Startup
+# ----------------------------
+
 main() {
+    # Run startup sync
+    startup_hosts_sync
+    
     while true; do
         show_menu
         read -r CHOICE
@@ -800,72 +1248,78 @@ main() {
                 else
                     echo -e "${RED}Please run with sudo for local installation${NC}"
                 fi
-                break
                 ;;
             2)
                 install_java_remote
-                break
                 ;;
             3)
                 install_from_file
-                break
                 ;;
             4)
+                install_from_database
+                ;;
+            5)
                 if [ "$EUID" -eq 0 ]; then
                     uninstall_java_local
                 else
                     echo -e "${RED}Please run with sudo for local uninstallation${NC}"
                 fi
-                break
-                ;;
-            5)
-                uninstall_java_remote
-                break
                 ;;
             6)
-                uninstall_from_file
-                break
+                uninstall_java_remote
                 ;;
             7)
-                check_java_local
-                break
+                uninstall_from_file
                 ;;
             8)
+                uninstall_from_database
+                ;;
+            9)
+                check_java_local
+                ;;
+            10)
                 echo -e "${BLUE}Enter remote host (user@hostname):${NC}"
                 read -r REMOTE_HOST
                 
                 echo -e "${BLUE}Use specific SSH key? (leave empty for default):${NC}"
                 read -r SSH_KEY
                 
-                local SSH_OPTS=""
+                SSH_OPTS=""
                 if [ -n "$SSH_KEY" ]; then
                     SSH_OPTS="-i $SSH_KEY"
                 fi
                 
                 check_java_remote "$REMOTE_HOST" "$SSH_OPTS"
-                break
-                ;;
-            9)
-                check_status_from_database
-                break
-                ;;
-            10)
-                verify_database_config
-                break
                 ;;
             11)
-                manage_ssh_keys_menu
+                check_status_from_database
                 ;;
             12)
+                verify_database_config
+                ;;
+            13)
+                manage_ssh_keys_menu
+                ;;
+            14)
+                sync_hosts_from_database
+                ;;
+            15)
                 echo -e "${GREEN}Exiting...${NC}"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}Invalid option. Please select 1-12.${NC}\n"
+                echo -e "${RED}Invalid option. Please select 1-15.${NC}\n"
                 ;;
         esac
+        
+        # Add a pause before showing menu again (except for exit)
+        if [ "$CHOICE" != "15" ]; then
+            echo -e "\n${BLUE}Press Enter to continue...${NC}"
+            read -r
+        fi
     done
 }
 
 # Run main function
 main
+  

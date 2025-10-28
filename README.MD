@@ -115,7 +115,7 @@ sudo ./setup_DB_procedures.sh
 ```
 -- Insert default rows with your own required data 
 
-    INSERT INTO eliteel5_servers.servers (ssh_user, hostname, ip_address, environment, active) VALUES
+    INSERT INTO servers.servers (ssh_user, hostname, ip_address, environment, active) VALUES
         ('eliteel5', 'debs', '192.168.0.146', 'production', 1),
         ('mark', 'raspberrypi.local', '192.168.0.167', 'production', 1);
 
